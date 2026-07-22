@@ -9,6 +9,7 @@
 import json
 import os
 import re
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -53,6 +54,7 @@ def count_dir(dir_path: Path, compiled: list[re.Pattern]) -> tuple[int, int]:
 
     跳过编译后正则匹配到的目录及其后代。
     """
+    t0 = time.time()
     fc, ts = 0, 0
     try:
         for f in dir_path.rglob("*"):
@@ -70,6 +72,10 @@ def count_dir(dir_path: Path, compiled: list[re.Pattern]) -> tuple[int, int]:
                 pass
     except (PermissionError, OSError):
         pass
+    elapsed = time.time() - t0
+    if elapsed > 1.0:
+        from meta_store.logger import debug
+        debug(f"count_dir({dir_path.name}): {fc} files, {elapsed:.1f}s")
     return fc, ts
 
 

@@ -12,6 +12,7 @@
 
 import json
 import sys
+import time
 import threading
 import webbrowser
 from datetime import datetime
@@ -22,6 +23,7 @@ from urllib.parse import urlparse
 from meta_store.scanner import merge_des_from_tree, scan_path, sync_des_across_entries
 from meta_store.store import load_store, save_store, STORE_FILE, DATA_DIR
 from meta_store.config import load_config, save_config, CONFIG_FILE
+from meta_store.logger import info, debug, warn, error as log_error
 
 # ── 配置 ──────────────────────────────────────────────────────
 
@@ -160,8 +162,8 @@ class MetaHandler(BaseHTTPRequestHandler):
             exclude_pats.extend(n.strip() for n in extra.split(",") if n.strip())
 
         try:
-            import time
             t0 = time.time()
+            info(f"扫描开始: {key}")
             new_tree = scan_path(
                 target,
                 depth=depth,
@@ -170,8 +172,9 @@ class MetaHandler(BaseHTTPRequestHandler):
                 dirs_only=dirs_only,
             )
             elapsed = time.time() - t0
-            print(f"[扫描] {key} — {elapsed:.1f}s")
+            info(f"扫描完成: {key} ({elapsed:.1f}s)")
         except Exception as e:
+            log_error(f"扫描失败: {key} - {e}")
             self._send_json({"error": f"扫描失败: {e}"}, 500)
             return
 
@@ -312,10 +315,8 @@ def main():
     server = HTTPServer(("127.0.0.1", port), MetaHandler)
 
     url = f"http://127.0.0.1:{port}"
-    print(f"Meta Store 服务已启动: {url}")
-    print(f"存储文件: {STORE_FILE}")
-    print("按 Ctrl+C 停止")
-    print()
+    info(f"服务启动: {url}")
+    info(f"存储文件: {STORE_FILE}")
 
     if not args.no_browser:
         webbrowser.open(url)

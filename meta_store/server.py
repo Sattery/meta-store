@@ -160,6 +160,8 @@ class MetaHandler(BaseHTTPRequestHandler):
             exclude_pats.extend(n.strip() for n in extra.split(",") if n.strip())
 
         try:
+            import time
+            t0 = time.time()
             new_tree = scan_path(
                 target,
                 depth=depth,
@@ -167,6 +169,8 @@ class MetaHandler(BaseHTTPRequestHandler):
                 exclude_patterns=exclude_pats,
                 dirs_only=dirs_only,
             )
+            elapsed = time.time() - t0
+            print(f"[扫描] {key} — {elapsed:.1f}s")
         except Exception as e:
             self._send_json({"error": f"扫描失败: {e}"}, 500)
             return

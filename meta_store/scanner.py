@@ -49,25 +49,27 @@ def is_excluded(name: str, compiled: list[re.Pattern]) -> bool:
 
 # ── 目录统计（递归）───────────────────────────────────────────
 
-def count_dir(dir_path: Path, compiled: list[re.Pattern]) -> tuple[int, int]:
-    """递归统计目录内文件数和总大小。返回 (file_count, total_size)。
+def count_dir(dir_path: Path, compiled: list[re.Pattern], max_depth: int = 0) -> tuple[int, int]:
+    """统计目录内文件数和总大小。返回 (file_count, total_size)。
 
+    max_depth: 递归深度限制（0 = 只看直接文件，-1 = 不限）。
     跳过编译后正则匹配到的目录及其后代。
     """
     t0 = time.time()
     fc, ts = 0, 0
     try:
-        for f in dir_path.rglob("*"):
-            # 跳过排除目录及其后代
-            if any(is_excluded(p.name, compiled) for p in f.parents if p != dir_path):
+        for entry in os.scandir(dir_path):
+            if is_excluded(entry.name, compiled):
                 continue
             try:
-                if f.is_file() and not f.is_symlink():
-                    try:
-                        fc += 1
-                        ts += f.stat().st_size
-                    except OSError:
-                        pass
+                if entry.is_file() and not entry.is_symlink():
+                    st = entry.stat()
+                    fc += 1
+                    ts += st.st_size
+                elif entry.is_dir() and not entry.is_symlink() and (max_depth < 0 or max_depth > 0):
+                    sub_fc, sub_ts = count_dir(Path(entry.path), compiled, max_depth - 1 if max_depth > 0 else -1)
+                    fc += sub_fc
+                    ts += sub_ts
             except OSError:
                 pass
     except (PermissionError, OSError):
@@ -135,7 +137,8 @@ def build_tree(
             need_fc = "file_count" in fields
             need_ts = "total_size" in fields or "total_size_human" in fields
             if need_fc or need_ts:
-                fc, ts = count_dir(entry, compiled)
+                remaining = max_depth - current_depth if max_depth >= 0 else -1
+                fc, ts = count_dir(entry, compiled, remaining)
                 if need_fc:
                     node["file_count"] = fc
                 if "total_size" in fields:
@@ -251,7 +254,7 @@ def scan_path(
         root_node["items"] = new_items
 
     if "file_count" in selected_fields or "total_size" in selected_fields or "total_size_human" in selected_fields:
-        fc, ts = count_dir(target, compiled)
+        fc, ts = count_dir(target, compiled, depth)
         if "file_count" in selected_fields:
             root_node["file_count"] = fc
         if "total_size" in selected_fields:

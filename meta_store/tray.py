@@ -108,6 +108,13 @@ class TrayApp:
         else:
             subprocess.Popen(["xdg-open", str(CONFIG_FILE)])
 
+    def _on_restart(self, icon=None, item=None):
+        """停止服务 → 重新启动 → 打开浏览器。"""
+        self._stop_server()
+        server_thread = threading.Thread(target=self._start_server, daemon=True)
+        server_thread.start()
+        threading.Timer(1.0, lambda: webbrowser.open(EDITOR_URL.format(port=self.port))).start()
+
     def _on_exit(self, icon=None, item=None):
         self._stop_server()
         if self.icon:
@@ -143,6 +150,7 @@ class TrayApp:
                 ),
                 pystray.Menu.SEPARATOR,
                 pystray.MenuItem("打开配置", self._on_config),
+                pystray.MenuItem("重启服务", self._on_restart),
                 pystray.Menu.SEPARATOR,
                 pystray.MenuItem("退出", self._on_exit),
             ),

@@ -163,7 +163,7 @@ class MetaHandler(BaseHTTPRequestHandler):
 
         try:
             t0 = time.time()
-            info(f"扫描开始: {key}")
+            info(f"扫描开始: {target}")
             new_tree = scan_path(
                 target,
                 depth=depth,
@@ -172,9 +172,9 @@ class MetaHandler(BaseHTTPRequestHandler):
                 dirs_only=dirs_only,
             )
             elapsed = time.time() - t0
-            info(f"扫描完成: {key} ({elapsed:.1f}s)")
+            info(f"扫描完成: {target} ({elapsed:.1f}s)")
         except Exception as e:
-            log_error(f"扫描失败: {key} - {e}")
+            log_error(f"扫描失败: {target} - {e}")
             self._send_json({"error": f"扫描失败: {e}"}, 500)
             return
 

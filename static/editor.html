@@ -1,0 +1,1200 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Meta Store — 目录树元数据管理</title>
+<style>
+:root {
+    --bg: #f5f5f5;
+    --surface: #ffffff;
+    --border: #e0e0e0;
+    --text: #333333;
+    --text-secondary: #888888;
+    --accent: #4a90d9;
+    --accent-hover: #357abd;
+    --error: #d94a4a;
+    --success: #4a9c5c;
+    --warn: #d9a84a;
+    --sidebar-bg: #fafafa;
+    --node-hover: #f0f5ff;
+    --dir-color: #4a90d9;
+    --file-color: #888;
+    --input-bg: #ffffff;
+    --tag-bg: #eef3fb;
+    --active-bg: #e8f0fe;
+    --shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+    font-family: -apple-system, "Microsoft YaHei", "PingFang SC", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+/* ── 顶栏 ── */
+.toolbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 16px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    box-shadow: var(--shadow);
+    z-index: 10;
+    flex-shrink: 0;
+}
+.toolbar .logo { font-size: 18px; font-weight: 700; color: var(--accent); white-space: nowrap; }
+.toolbar .logo span { color: var(--text-secondary); font-weight: 400; font-size: 13px; margin-left: 4px; }
+.path-input-wrap {
+    flex: 1; display: flex; gap: 6px; align-items: center;
+}
+.path-input-wrap input {
+    flex: 1; padding: 7px 12px; border: 1px solid var(--border);
+    border-radius: 6px; font-size: 13px; background: var(--input-bg);
+    outline: none; transition: border-color .2s;
+}
+.path-input-wrap input:focus { border-color: var(--accent); }
+.btn {
+    padding: 7px 16px; border: none; border-radius: 6px; font-size: 13px;
+    cursor: pointer; white-space: nowrap; transition: all .15s;
+    display: inline-flex; align-items: center; gap: 4px;
+}
+.btn-primary { background: var(--accent); color: #fff; }
+.btn-primary:hover { background: var(--accent-hover); }
+.btn-primary:disabled { background: #ccc; cursor: not-allowed; }
+.btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text); }
+.btn-outline:hover { background: var(--bg); }
+.btn-danger { background: transparent; border: 1px solid var(--error); color: var(--error); }
+.btn-danger:hover { background: #fdf0f0; }
+.btn-sm { padding: 4px 10px; font-size: 12px; }
+.settings-row {
+    display: flex; gap: 8px; align-items: center;
+    padding: 6px 16px; background: var(--surface);
+    border-bottom: 1px solid var(--border); flex-shrink: 0;
+}
+.settings-row label { font-size: 12px; color: var(--text-secondary); white-space: nowrap; }
+.settings-row input, .settings-row select {
+    padding: 4px 8px; border: 1px solid var(--border);
+    border-radius: 4px; font-size: 12px; background: var(--input-bg);
+}
+
+/* ── 主体 ── */
+.main {
+    display: flex; flex: 1; overflow: hidden;
+}
+
+/* ── 侧栏 ── */
+.sidebar {
+    width: 260px; background: var(--sidebar-bg);
+    border-right: 1px solid var(--border);
+    display: flex; flex-direction: column;
+    flex-shrink: 0; overflow: hidden;
+}
+.sidebar-header {
+    padding: 12px 14px; font-size: 13px; font-weight: 600;
+    color: var(--text); border-bottom: 1px solid var(--border);
+    display: flex; justify-content: space-between; align-items: center;
+}
+.sidebar-opt {
+    display: flex; align-items: center; gap: 4px;
+    font-size: 11px; font-weight: 400; cursor: pointer;
+    color: var(--text-secondary);
+}
+.sidebar-opt input { cursor: pointer; }
+.sidebar-list {
+    flex: 1; overflow-y: auto; padding: 4px 0;
+}
+.sidebar-item {
+    display: flex; align-items: center; padding: 10px 14px;
+    cursor: pointer; gap: 8px; border-left: 3px solid transparent;
+    transition: all .12s; font-size: 13px;
+}
+.sidebar-item:hover { background: var(--node-hover); }
+.sidebar-item.active { background: var(--active-bg); border-left-color: var(--accent); font-weight: 600; }
+.sidebar-item .path-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sidebar-item .path-meta { font-size: 11px; color: var(--text-secondary); flex-shrink: 0; }
+.sidebar-item .del-btn {
+    visibility: hidden; font-size: 14px; color: var(--error); cursor: pointer;
+    padding: 2px 4px; border-radius: 3px; flex-shrink: 0;
+}
+.sidebar-item:hover .del-btn { visibility: visible; }
+.sidebar-item .del-btn:hover { background: #fdf0f0; }
+.sidebar-empty {
+    padding: 30px 14px; text-align: center; color: var(--text-secondary); font-size: 13px;
+    line-height: 1.6;
+}
+
+/* ── 侧栏树形子目录 ── */
+.sidebar-path { }
+.sidebar-children { overflow: hidden; }
+.sidebar-children.collapsed { display: none; }
+.sub-toggle {
+    width: 14px; height: 14px; font-size: 9px; line-height: 14px;
+    text-align: center; flex-shrink: 0; color: var(--text-secondary);
+    cursor: pointer; transition: transform .15s; user-select: none;
+}
+.sub-toggle.expanded { transform: rotate(90deg); }
+.sub-toggle.leaf { visibility: hidden; }
+.sidebar-item.sub-item { font-size: 12px; padding-top: 6px; padding-bottom: 6px; }
+.sidebar-item.sub-item .path-name { font-size: 12px; }
+.sidebar-item.sub-item.unscanned .path-name { color: var(--text-secondary); }
+.sidebar-item.sub-item.unscanned .node-icon, 
+.sidebar-item.sub-item.unscanned > span:nth-child(2) { opacity: 0.5; }
+.sidebar-item.sub-item.scanned .path-name { color: var(--text); font-weight: 500; }
+.sidebar-item.sub-item.scanned.active { background: var(--active-bg); border-left-color: var(--accent); }
+.sidebar-item.sub-item:hover .path-name { color: var(--text); }
+.scan-sub-btn {
+    visibility: hidden; font-size: 12px; color: var(--accent); cursor: pointer;
+    padding: 2px 4px; border-radius: 3px; flex-shrink: 0;
+}
+.sidebar-item:hover .scan-sub-btn { visibility: visible; }
+.scan-sub-btn:hover { background: var(--node-hover); }
+
+/* ── 内容区 ── */
+.content {
+    flex: 1; display: flex; flex-direction: column; overflow: hidden;
+}
+.content-header {
+    padding: 10px 16px; display: flex; align-items: center;
+    gap: 10px; border-bottom: 1px solid var(--border);
+    background: var(--surface); flex-shrink: 0;
+}
+.content-header .current-path { font-size: 14px; font-weight: 600; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.content-header .scan-time { font-size: 12px; color: var(--text-secondary); }
+.search-wrap { position: relative; }
+.search-wrap input {
+    padding: 5px 10px 5px 28px; border: 1px solid var(--border);
+    border-radius: 4px; font-size: 12px; width: 200px; background: var(--input-bg);
+}
+.search-wrap .search-icon {
+    position: absolute; left: 8px; top: 50%; transform: translateY(-50%);
+    font-size: 13px; color: var(--text-secondary); pointer-events: none;
+}
+.tree-area {
+    flex: 1; overflow-y: auto; padding: 8px 0;
+}
+
+/* ── 目录树节点 ── */
+.node { user-select: none; }
+.node-row {
+    display: flex; align-items: center; gap: 6px;
+    padding: 5px 16px; cursor: pointer; transition: background .1s;
+    min-height: 34px;
+}
+.node-row:hover { background: var(--node-hover); }
+.hidden-by-search { display: none !important; }
+.highlight > .node-row { background: #fff9e6; }
+.ancestor-highlight > .node-row { background: #fafafa; }
+.toggle {
+    width: 16px; height: 16px; font-size: 10px; line-height: 16px;
+    text-align: center; flex-shrink: 0; color: var(--text-secondary);
+    transition: transform .15s;
+}
+.toggle.expanded { transform: rotate(90deg); }
+.toggle.leaf { visibility: hidden; }
+.node-icon { font-size: 14px; flex-shrink: 0; }
+.node-icon.dir { color: var(--dir-color); }
+.node-icon.file { color: var(--file-color); }
+.node-name { font-size: 13px; flex-shrink: 0; }
+.node-meta { font-size: 11px; color: var(--text-secondary); margin-left: auto; flex-shrink: 0; white-space: nowrap; }
+.des-input-wrap { flex: 1; min-width: 60px; margin-left: 4px; }
+.des-input {
+    width: 100%; padding: 3px 8px; border: 1px solid transparent;
+    border-radius: 4px; font-size: 12px; color: var(--text-secondary);
+    background: transparent; outline: none; transition: all .15s;
+}
+.des-input:focus { border-color: var(--accent); background: var(--surface); color: var(--text); }
+.des-input.has-value { color: var(--text); font-style: normal; }
+.des-input::placeholder { color: #ccc; font-style: italic; }
+
+/* ── view 模式：只读 ── */
+body.view-mode .des-input { pointer-events: none; background: transparent; }
+body.view-mode .des-input-wrap::after {
+    content: "read-only"; font-size: 10px; color: #bbb;
+    position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+    pointer-events: none;
+}
+body.view-mode .des-input-wrap { position: relative; }
+body.view-mode #dirtyBadge { display: none !important; }
+body.view-mode .btn-primary { opacity: 0.4; pointer-events: none; }
+
+.node-children { overflow: hidden; }
+.node-children.collapsed { display: none; }
+
+/* ── 底栏 ── */
+.statusbar {
+    display: flex; align-items: center; gap: 12px;
+    padding: 8px 16px; background: var(--surface);
+    border-top: 1px solid var(--border); font-size: 12px;
+    color: var(--text-secondary); flex-shrink: 0;
+}
+.statusbar .dirty-badge {
+    display: none; background: var(--warn); color: #fff;
+    padding: 2px 8px; border-radius: 10px; font-size: 11px;
+}
+.statusbar .spacer { flex: 1; }
+
+/* ── Toast ── */
+.toast {
+    position: fixed; bottom: 40px; left: 50%; transform: translateX(-50%);
+    padding: 10px 24px; border-radius: 8px; font-size: 13px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: 1000;
+    animation: toastIn .25s ease;
+    pointer-events: none;
+}
+@keyframes toastIn {
+    from { opacity: 0; transform: translateX(-50%) translateY(10px); }
+    to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+.toast.success { background: #e6f7ed; color: var(--success); border: 1px solid #b7e4c7; }
+.toast.error { background: #fdeaea; color: var(--error); border: 1px solid #f5c6c6; }
+.toast.info { background: #e8f0fe; color: var(--accent); border: 1px solid #b6d4fe; }
+
+/* ── 配置弹窗 ── */
+.modal-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.35);
+    display: flex; align-items: center; justify-content: center; z-index: 1000;
+}
+.modal-box {
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: 12px; padding: 0; min-width: 360px;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.18);
+}
+.modal-header {
+    padding: 14px 18px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between; font-size: 15px;
+}
+.modal-body { padding: 16px 18px; }
+.modal-footer {
+    padding: 12px 18px; border-top: 1px solid var(--border);
+    display: flex; align-items: center; gap: 8px;
+}
+.modal-body label { color: var(--text-secondary); }
+.modal-body input { font-size: 13px; }
+.hint { font-size: 12px; }
+
+/* ── 扫描中遮罩 ── */
+.scanning-overlay {
+    position: fixed; inset: 0; background: rgba(255,255,255,0.7);
+    display: none; align-items: center; justify-content: center; z-index: 999;
+    flex-direction: column; gap: 16px;
+}
+.scanning-overlay.show { display: flex; }
+.scanning-spinner {
+    width: 36px; height: 36px; border: 3px solid var(--border);
+    border-top-color: var(--accent); border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.scanning-text { font-size: 14px; color: var(--text-secondary); }
+
+/* ── 右键菜单 ── */
+.context-menu {
+    display: none; position: fixed; background: var(--surface);
+    border: 1px solid var(--border); border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.12); z-index: 1001;
+    min-width: 160px; padding: 4px 0;
+}
+.context-menu .menu-item {
+    padding: 8px 16px; font-size: 13px; cursor: pointer;
+    display: flex; align-items: center; gap: 8px;
+}
+.context-menu .menu-item:hover { background: var(--node-hover); }
+.context-menu .divider { height: 1px; background: var(--border); margin: 4px 0; }
+</style>
+</head>
+<body>
+
+<!-- 顶栏 -->
+<div class="toolbar">
+    <div class="logo">Meta Store <span>目录树元数据</span></div>
+    <div class="path-input-wrap">
+        <input id="pathInput" type="text" placeholder="输入目录路径，如 D:\project\my-app" />
+        <button class="btn btn-outline btn-sm" id="browseBtn" title="选择文件夹：取目录名拼到当前路径后">📂</button>
+        <button class="btn btn-primary" id="scanBtn" title="扫描并添加到存储">🔍 扫描</button>
+    </div>
+    <button class="btn btn-outline btn-sm" id="configBtn" title="配置：存储路径、端口等">⚙️</button>
+</div>
+
+<!-- 扫描设置 -->
+<div class="settings-row">
+    <label>深度:</label>
+    <input id="depthInput" type="number" value="2" min="1" max="10" style="width:50px" />
+    <label>排除:</label>
+    <input id="excludeInput" type="text" value="meta.json,.workbuddy,node_modules,.git" style="width:180px" />
+    <label>仅目录:</label>
+    <input id="dirsOnlyCheck" type="checkbox" />
+</div>
+
+<!-- 主体 -->
+<div class="main">
+    <!-- 侧栏 -->
+    <div class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <span>📁 已扫描路径 <span id="pathCount" style="font-size:11px;color:var(--text-secondary)">0</span></span>
+            <label class="sidebar-opt" title="展开显示已扫描路径下的子目录树">
+                <input id="showSubdirsCheck" type="checkbox" checked /> 展示子目录
+            </label>
+        </div>
+        <div class="sidebar-list" id="sidebarList">
+            <div class="sidebar-empty">暂无扫描记录<br>在上方输入路径开始</div>
+        </div>
+    </div>
+
+    <!-- 内容区 -->
+    <div class="content">
+        <div class="content-header" id="contentHeader" style="display:none">
+            <span class="current-path" id="currentPath"></span>
+            <span class="scan-time" id="scanTime"></span>
+            <div class="search-wrap">
+                <span class="search-icon">🔍</span>
+                <input type="text" id="searchInput" placeholder="搜索文件名或描述..." />
+            </div>
+            <button class="btn btn-outline btn-sm" id="expandAllBtn">▸ 展开</button>
+            <button class="btn btn-outline btn-sm" id="collapseAllBtn">▾ 折叠</button>
+        </div>
+        <div class="tree-area" id="treeArea">
+            <div style="padding:60px 16px;text-align:center;color:var(--text-secondary);font-size:14px">
+                <div style="font-size:48px;margin-bottom:16px">📂</div>
+                选择一个已扫描路径，或在上方输入路径开始扫描
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 底栏 -->
+<div class="statusbar" id="statusbar" style="display:none">
+    <span class="dirty-badge" id="dirtyBadge">● 已修改</span>
+    <span id="treeStats"></span>
+    <span class="spacer"></span>
+    <button class="btn btn-primary btn-sm" id="saveBtn">💾 保存 des</button>
+</div>
+
+<!-- 扫描遮罩 -->
+<div class="scanning-overlay" id="scanOverlay">
+    <div class="scanning-spinner"></div>
+    <div class="scanning-text" id="scanText">正在扫描...</div>
+</div>
+
+<!-- 配置面板 -->
+<div class="modal-overlay" id="configModal" style="display:none">
+    <div class="modal-box" style="max-width:520px">
+        <div class="modal-header">
+            <strong>⚙️ 配置</strong>
+            <button class="btn btn-outline btn-sm" id="configCloseBtn">✕</button>
+        </div>
+        <div class="modal-body">
+            <p class="hint" id="configPathHint" style="margin:0 0 12px;font-size:12px;color:var(--text-secondary)"></p>
+            <label style="font-size:13px;display:block;margin-bottom:4px">存储文件路径</label>
+            <input id="configStorePath" type="text" style="width:100%;margin-bottom:12px"
+                   placeholder="相对路径: .metastore/meta-store.json&#10;绝对路径: D:\my-data\meta-store.json" />
+            <label style="font-size:13px;display:block;margin-bottom:4px">端口</label>
+            <input id="configPort" type="number" style="width:100%;margin-bottom:12px" min="1024" max="65535" />
+            <label style="font-size:13px;display:block;margin-bottom:4px">
+                <input id="configAutoOpen" type="checkbox" style="width:auto" />
+                启动时自动打开浏览器
+            </label>
+        </div>
+        <div class="modal-footer">
+            <span id="configMsg" style="font-size:12px;color:var(--text-secondary);margin-right:auto"></span>
+            <button class="btn btn-outline btn-sm" id="configCancelBtn">取消</button>
+            <button class="btn btn-primary btn-sm" id="configSaveBtn">保存配置</button>
+        </div>
+    </div>
+</div>
+
+<script>
+// ── 视图模式检测（EMBEDDED_STORE 由 meta-store.py view 注入）──
+const VIEW_MODE = window.EMBEDDED_STORE !== undefined;
+
+// ── 状态 ──
+let store = { paths: {} };
+let currentPath = null;      // 当前选中的路径 key
+let currentTree = null;      // 当前显示树
+let isDirty = false;
+let searchQuery = '';
+
+const API = '';
+
+// DOM
+const pathInput = document.getElementById('pathInput');
+const scanBtn = document.getElementById('scanBtn');
+const browseBtn = document.getElementById('browseBtn');
+const depthInput = document.getElementById('depthInput');
+const excludeInput = document.getElementById('excludeInput');
+const dirsOnlyCheck = document.getElementById('dirsOnlyCheck');
+const showSubdirsCheck = document.getElementById('showSubdirsCheck');
+const sidebarList = document.getElementById('sidebarList');
+const pathCount = document.getElementById('pathCount');
+const contentHeader = document.getElementById('contentHeader');
+const currentPathEl = document.getElementById('currentPath');
+const scanTimeEl = document.getElementById('scanTime');
+const searchInput = document.getElementById('searchInput');
+const treeArea = document.getElementById('treeArea');
+const statusbar = document.getElementById('statusbar');
+const dirtyBadge = document.getElementById('dirtyBadge');
+const treeStats = document.getElementById('treeStats');
+const saveBtn = document.getElementById('saveBtn');
+const scanOverlay = document.getElementById('scanOverlay');
+const scanText = document.getElementById('scanText');
+const expandAllBtn = document.getElementById('expandAllBtn');
+const collapseAllBtn = document.getElementById('collapseAllBtn');
+
+// ── Toast ──
+let toastTimer;
+function toast(msg, type = 'info') {
+    const old = document.querySelector('.toast');
+    if (old) old.remove();
+    clearTimeout(toastTimer);
+    const el = document.createElement('div');
+    el.className = `toast ${type}`;
+    el.textContent = msg;
+    document.body.appendChild(el);
+    toastTimer = setTimeout(() => el.remove(), 2500);
+}
+
+// ── API 调用 ──
+async function api(url, options = {}) {
+    try {
+        const resp = await fetch(API + url, {
+            headers: { 'Content-Type': 'application/json' },
+            ...options,
+        });
+        if (!resp.ok) {
+            const err = await resp.json().catch(() => ({ error: `HTTP ${resp.status}` }));
+            throw new Error(err.error || `HTTP ${resp.status}`);
+        }
+        return resp.json();
+    } catch (e) {
+        if (e.message.includes('Failed to fetch')) {
+            throw new Error('无法连接服务端，请确认 server.py 已启动');
+        }
+        throw e;
+    }
+}
+
+// ── 加载 store ──
+async function loadStore() {
+    if (VIEW_MODE) {
+        store = window.EMBEDDED_STORE;
+        renderSidebar();
+        return;
+    }
+    try {
+        store = await api('/api/store');
+    } catch (_) {
+        store = { paths: {} };
+    }
+    renderSidebar();
+}
+
+// ── 路径工具 ──
+function normPath(p) {
+    return p.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
+}
+function isDescendantOf(path, ancestor) {
+    const p = normPath(path), a = normPath(ancestor);
+    return p !== a && p.startsWith(a + '/');
+}
+function getRootPaths() {
+    const all = Object.keys(store.paths || {});
+    return all.filter(p => !all.some(o => o !== p && isDescendantOf(p, o))).sort();
+}
+function pathSep(abs) {
+    return abs.includes('/') && !abs.includes('\\') ? '/' : '\\';
+}
+
+// ── 侧栏渲染 ──
+function renderSidebar() {
+    const allPaths = Object.keys(store.paths || {});
+    pathCount.textContent = allPaths.length;
+
+    if (allPaths.length === 0) {
+        sidebarList.innerHTML = '<div class="sidebar-empty">暂无扫描记录<br>在上方输入路径开始</div>';
+        return;
+    }
+
+    if (showSubdirsCheck.checked) {
+        // 树形模式：只显示根路径，子目录内联展示
+        const roots = getRootPaths();
+        sidebarList.innerHTML = roots.map(p => renderSidebarPath(p)).join('');
+    } else {
+        // 扁平模式：所有路径平铺
+        const sorted = allPaths.sort();
+        sidebarList.innerHTML = sorted.map(p => renderSidebarFlat(p)).join('');
+    }
+}
+
+function renderSidebarFlat(p) {
+    const entry = store.paths[p];
+    const active = currentPath === p ? ' active' : '';
+    const meta = entry.tree?.items?.length ? entry.tree.items.length + ' 项' : '';
+    return `
+        <div class="sidebar-item${active}" onclick="selectPath('${escapeJs(p)}')">
+            <span>📁</span>
+            <span class="path-name" title="${escapeHtml(p)}">${escapeHtml(entry.name || p)}</span>
+            <span class="path-meta">${meta}</span>
+            <span class="del-btn" onclick="event.stopPropagation();removePath('${escapeJs(p)}')" title="移除">✕</span>
+        </div>
+    `;
+}
+
+function renderSidebarPath(p) {
+    const entry = store.paths[p];
+    const active = currentPath === p ? ' active' : '';
+    const items = entry.tree?.items || [];
+    const meta = items.length ? items.length + ' 项' : '';
+    const subDirs = items.filter(i => i.type === 'dir');
+    const hasSub = subDirs.length > 0;
+
+    let html = `<div class="sidebar-path" data-path="${escapeHtml(p)}">`;
+    html += `<div class="sidebar-item${active}" onclick="selectPath('${escapeJs(p)}')">`;
+    html += `<span class="sub-toggle${hasSub ? '' : ' leaf'}" onclick="event.stopPropagation();toggleSidebarSub(this)">▶</span>`;
+    html += `<span>📁</span>`;
+    html += `<span class="path-name" title="${escapeHtml(p)}">${escapeHtml(entry.name || p)}</span>`;
+    html += `<span class="path-meta">${meta}</span>`;
+    html += `<span class="del-btn" onclick="event.stopPropagation();removePath('${escapeJs(p)}')" title="移除">✕</span>`;
+    html += `</div>`;
+    if (hasSub) {
+        html += `<div class="sidebar-children collapsed">`;
+        for (const sub of subDirs) {
+            html += renderSidebarSub(sub, p, 1);
+        }
+        html += `</div>`;
+    }
+    html += `</div>`;
+    return html;
+}
+
+function renderSidebarSub(node, parentAbs, level) {
+    const sep = pathSep(parentAbs);
+    const childAbs = parentAbs + sep + node.name;
+    const isScanned = !!store.paths[childAbs];
+
+    // 已扫描：用 store 里的树数据；未扫描：用继承自父扫描的节点数据
+    const childItems = isScanned
+        ? (store.paths[childAbs].tree?.items || [])
+        : (node.items || []);
+    const childSubDirs = childItems.filter(i => i.type === 'dir');
+    const hasSub = childSubDirs.length > 0;
+
+    const stateClass = isScanned ? 'scanned' : 'unscanned';
+    const active = currentPath === childAbs ? ' active' : '';
+    const icon = isScanned ? '📂' : '📁';
+
+    // 已扫描 → 点击选中展示树；未扫描 → 点击不做任何操作（避免误扫描）
+    const rowClick = isScanned
+        ? `onclick="selectPath('${escapeJs(childAbs)}')"`
+        : '';
+
+    let html = `<div class="sidebar-sub" data-abs="${escapeHtml(childAbs)}">`;
+    html += `<div class="sidebar-item sub-item ${stateClass}${active}" style="padding-left:${14 + level * 16}px" ${rowClick}>`;
+    html += `<span class="sub-toggle${hasSub ? '' : ' leaf'}" onclick="event.stopPropagation();toggleSidebarSub(this)">▶</span>`;
+    html += `<span>${icon}</span>`;
+    html += `<span class="path-name" title="${escapeHtml(childAbs)}">${escapeHtml(node.name)}</span>`;
+    html += `<span class="scan-sub-btn" onclick="event.stopPropagation();scanSubPath('${escapeJs(childAbs)}')" title="${isScanned ? '重新扫描' : '扫描此子目录'}">🔍</span>`;
+    html += `</div>`;
+    if (hasSub) {
+        html += `<div class="sidebar-children collapsed">`;
+        for (const sub of childSubDirs) {
+            html += renderSidebarSub(sub, childAbs, level + 1);
+        }
+        html += `</div>`;
+    }
+    html += `</div>`;
+    return html;
+}
+
+function toggleSidebarSub(el) {
+    const container = el.closest('.sidebar-path, .sidebar-sub');
+    if (!container) return;
+    const children = container.querySelector(':scope > .sidebar-children');
+    if (!children) return;
+    const collapsed = children.classList.toggle('collapsed');
+    el.classList.toggle('expanded', !collapsed);
+}
+
+// 扫描子目录：不新建根，原地从灰变黑
+async function scanSubPath(absPath) {
+    scanOverlay.classList.add('show');
+    scanText.textContent = '正在扫描 ' + absPath + ' ...';
+    try {
+        const result = await api('/api/scan', {
+            method: 'POST',
+            body: JSON.stringify({
+                path: absPath,
+                depth: 2,
+                fields: 'size,size_human,modified,file_count,total_size_human',
+                exclude: excludeInput.value,
+                dirs_only: dirsOnlyCheck.checked,
+            }),
+        });
+        if (result.ok) {
+            await loadStore();
+            renderSidebar();
+            toast('子目录已扫描', 'success');
+        } else {
+            toast(result.error || '扫描失败', 'error');
+        }
+    } catch (e) {
+        toast(e.message, 'error');
+    } finally {
+        scanOverlay.classList.remove('show');
+    }
+}
+
+function escapeHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function escapeJs(s) {
+    return String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'\\"');
+}
+
+// ── 扫描 ──
+async function doScan() {
+    const path = pathInput.value.trim();
+    if (!path) { toast('请输入要扫描的目录路径', 'error'); return; }
+
+    scanBtn.disabled = true;
+    scanOverlay.classList.add('show');
+    scanText.textContent = '正在扫描 ' + path + ' ...';
+
+    try {
+        const result = await api('/api/scan', {
+            method: 'POST',
+            body: JSON.stringify({
+                path: path,
+                depth: parseInt(depthInput.value) || 2,
+                fields: 'size,size_human,modified,file_count,total_size_human',
+                exclude: excludeInput.value,
+                dirs_only: dirsOnlyCheck.checked,
+            }),
+        });
+
+        if (result.ok) {
+            // 重新加载 store
+            await loadStore();
+            // 选中刚扫描的路径
+            currentPath = result.path;
+            currentTree = result.tree;
+            renderSidebar();
+            showTree();
+            toast('扫描完成，已添加到存储', 'success');
+            pathInput.value = '';
+        } else {
+            toast(result.error || '扫描失败', 'error');
+        }
+    } catch (e) {
+        toast(e.message, 'error');
+    } finally {
+        scanBtn.disabled = false;
+        scanOverlay.classList.remove('show');
+    }
+}
+
+// ── 选择路径 ──
+function selectPath(pathKey) {
+    const entry = store.paths[pathKey];
+    if (!entry) return;
+
+    currentPath = pathKey;
+    currentTree = entry.tree;
+    isDirty = false;
+    dirtyBadge.style.display = 'none';
+    renderSidebar();
+    showTree();
+}
+
+// ── 移除路径 ──
+async function removePath(pathKey) {
+    if (!confirm(`确定从存储中移除 "${pathKey}" 吗？`)) return;
+
+    try {
+        await api('/api/remove', {
+            method: 'POST',
+            body: JSON.stringify({ path: pathKey }),
+        });
+        if (currentPath === pathKey) {
+            currentPath = null;
+            currentTree = null;
+        }
+        await loadStore();
+        if (currentPath) {
+            renderSidebar();
+        } else {
+            clearContent();
+        }
+        toast('已移除', 'success');
+    } catch (e) {
+        toast(e.message, 'error');
+    }
+}
+
+// ── 清除内容区 ──
+function clearContent() {
+    currentPath = null;
+    currentTree = null;
+    isDirty = false;
+    contentHeader.style.display = 'none';
+    statusbar.style.display = 'none';
+    dirtyBadge.style.display = 'none';
+    treeArea.innerHTML = `
+        <div style="padding:60px 16px;text-align:center;color:var(--text-secondary);font-size:14px">
+            <div style="font-size:48px;margin-bottom:16px">📂</div>
+            选择一个已扫描路径，或在上方输入路径开始扫描
+        </div>
+    `;
+}
+
+// ── 显示目录树 ──
+function showTree() {
+    if (!currentTree) { clearContent(); return; }
+
+    contentHeader.style.display = 'flex';
+    statusbar.style.display = 'flex';
+    currentPathEl.textContent = currentPath || '';
+    scanTimeEl.textContent = currentTree.scan_time || '';
+
+    let dirs = 0, files = 0;
+    countNodes(currentTree, { dirs: 0, files: 0 });
+    function countNodes(node, counter) {
+        if (!node || !node.items) return;
+        for (const item of node.items) {
+            if (item.type === 'dir') counter.dirs++;
+            else counter.files++;
+            if (item.items) countNodes(item, counter);
+        }
+    }
+    const c = { dirs: 0, files: 0 };
+    countNodes(currentTree, c);
+    treeStats.textContent = `${c.dirs} 目录 · ${c.files} 文件`;
+
+    treeArea.innerHTML = renderNode(currentTree, 0, 'root');
+    updateStats();
+}
+
+function renderNode(node, level, parentPath) {
+    if (!node) return '';
+    const isRoot = parentPath === 'root';
+    const hasChildren = node.items && node.items.length > 0;
+    const isDir = node.type === 'dir';
+    const nodePath = isRoot ? '' : (parentPath + '/' + node.name);
+    const icon = isDir ? (isRoot ? '📁' : '📂') : '📄';
+    const iconClass = isDir ? 'dir' : 'file';
+
+    // 元数据
+    let meta = '';
+    if (node.size_human) meta += node.size_human + ' ';
+    if (node.modified) meta += node.modified;
+    if (node.file_count !== undefined) meta += `${node.file_count} 文件 `;
+    if (node.total_size_human) meta += node.total_size_human;
+
+    const toggleClass = isDir && hasChildren ? '' : ' leaf';
+    const expanded = isRoot ? ' expanded' : '';
+    const desVal = node.des || '';
+
+    let html = `<div class="node" data-path="${escapeHtml(nodePath)}" data-type="${node.type}">`;
+    html += `<div class="node-row" style="padding-left:${16 + level * 20}px" onclick="toggleNode(event)" oncontextmenu="showContext(event, this)">`;
+    html += `<span class="toggle${toggleClass}${expanded}">▶</span>`;
+    html += `<span class="node-icon ${iconClass}">${icon}</span>`;
+    html += `<span class="node-name">${escapeHtml(node.name)}</span>`;
+    html += `<span class="node-meta">${meta.trim()}</span>`;
+    html += `<span class="des-input-wrap"><input class="des-input${desVal ? ' has-value' : ''}"
+        value="${escapeHtml(desVal)}" placeholder="点击添加描述..."
+        data-node-path="${escapeHtml(nodePath)}"
+        onchange="markDirty()" oninput="this.classList.toggle('has-value', !!this.value)"
+        onclick="event.stopPropagation()" />
+    </span>`;
+    html += `</div>`;
+
+    if (hasChildren) {
+        html += `<div class="node-children${isRoot ? '' : ' collapsed'}">`;
+        for (const child of node.items) {
+            html += renderNode(child, level + 1, nodePath);
+        }
+        html += `</div>`;
+    }
+
+    html += `</div>`;
+    return html;
+}
+
+// ── 展开/折叠 ──
+function toggleNode(e) {
+    const row = e.currentTarget;
+    const node = row.parentElement;
+    const children = node.querySelector(':scope > .node-children');
+    const toggle = row.querySelector('.toggle');
+    if (!children || toggle.classList.contains('leaf')) return;
+
+    const isCollapsed = children.classList.contains('collapsed');
+    if (isCollapsed) {
+        children.classList.remove('collapsed');
+        toggle.classList.add('expanded');
+    } else {
+        children.classList.add('collapsed');
+        toggle.classList.remove('expanded');
+    }
+}
+
+expandAllBtn.addEventListener('click', () => {
+    treeArea.querySelectorAll('.node-children').forEach(c => c.classList.remove('collapsed'));
+    treeArea.querySelectorAll('.toggle:not(.leaf)').forEach(t => t.classList.add('expanded'));
+});
+
+collapseAllBtn.addEventListener('click', () => {
+    treeArea.querySelectorAll('.node-children').forEach(c => c.classList.add('collapsed'));
+    treeArea.querySelectorAll('.toggle:not(.leaf)').forEach(t => t.classList.remove('expanded'));
+});
+
+// ── 搜索 ──
+searchInput.addEventListener('input', () => {
+    searchQuery = searchInput.value.trim().toLowerCase();
+    applySearch();
+});
+
+function applySearch() {
+    const nodes = treeArea.querySelectorAll('.node');
+    if (!searchQuery) {
+        nodes.forEach(n => {
+            n.classList.remove('hidden-by-search', 'highlight', 'ancestor-highlight');
+            const children = n.querySelector(':scope > .node-children');
+            if (children) children.classList.add('collapsed');
+        });
+        // 展开根
+        expandRoot();
+        updateStats();
+        return;
+    }
+
+    const matching = new Set();
+    nodes.forEach(n => {
+        const inp = n.querySelector('.des-input');
+        const nameSpan = n.querySelector('.node-name');
+        const nameText = nameSpan ? nameSpan.textContent.toLowerCase() : '';
+        const desText = inp ? inp.value.toLowerCase() : '';
+
+        if (nameText.includes(searchQuery) || desText.includes(searchQuery)) {
+            matching.add(n.dataset.path);
+            let parent = n.parentElement;
+            while (parent) {
+                if (parent.classList.contains('node')) {
+                    matching.add(parent.dataset.path + '__ancestor');
+                }
+                parent = parent.parentElement;
+            }
+        }
+    });
+
+    nodes.forEach(n => {
+        n.classList.remove('hidden-by-search', 'highlight', 'ancestor-highlight');
+        if (matching.has(n.dataset.path)) {
+            n.classList.add('highlight');
+            expandAncestors(n);
+        } else if (matching.has(n.dataset.path + '__ancestor')) {
+            n.classList.add('ancestor-highlight');
+            expandAncestors(n);
+        } else {
+            n.classList.add('hidden-by-search');
+        }
+    });
+    updateStats();
+}
+
+function expandAncestors(node) {
+    let parent = node.parentElement;
+    while (parent) {
+        if (parent.classList.contains('node-children')) {
+            parent.classList.remove('collapsed');
+            const toggle = parent.parentElement.querySelector(':scope > .node-row .toggle');
+            if (toggle) toggle.classList.add('expanded');
+        }
+        parent = parent.parentElement;
+    }
+}
+
+function expandRoot() {
+    const rootRow = treeArea.querySelector('.root-node > .node-row .toggle');
+    const rootChildren = treeArea.querySelector('.root-node > .node-children');
+    if (rootChildren) rootChildren.classList.remove('collapsed');
+    if (rootRow) rootRow.classList.add('expanded');
+}
+
+// ── 统计 ──
+function updateStats() {
+    const visible = treeArea.querySelectorAll('.node:not(.hidden-by-search)');
+    let dirs = 0, files = 0;
+    visible.forEach(n => {
+        if (n.dataset.type === 'dir') dirs++;
+        else if (n.dataset.type === 'file') files++;
+    });
+    treeStats.textContent = `${dirs} 目录 · ${files} 文件`;
+}
+
+// ── 修改标记 ──
+function markDirty() {
+    if (!isDirty) {
+        isDirty = true;
+        dirtyBadge.style.display = 'inline';
+    }
+}
+
+// ── 右键菜单 ──
+let contextEl = null;
+let contextTarget = null;
+
+function showContext(e, row) {
+    e.preventDefault();
+    if (!contextEl) {
+        contextEl = document.createElement('div');
+        contextEl.className = 'context-menu';
+        contextEl.innerHTML = `
+            <div class="menu-item" data-action="clear">🗑️ 清空描述</div>
+            <div class="divider"></div>
+            <div class="menu-item" data-action="clearAll">🧹 清空所有已填描述</div>
+        `;
+        document.body.appendChild(contextEl);
+        contextEl.addEventListener('click', ev => {
+            const action = ev.target.closest('.menu-item')?.dataset.action;
+            if (!action) return;
+            contextEl.style.display = 'none';
+            handleContextAction(action);
+        });
+    }
+    contextTarget = row;
+    contextEl.style.display = 'block';
+    contextEl.style.left = Math.min(e.clientX, window.innerWidth - 180) + 'px';
+    contextEl.style.top = e.clientY + 'px';
+}
+
+function handleContextAction(action) {
+    if (!contextTarget) return;
+    const node = contextTarget.closest('.node');
+
+    if (action === 'clear') {
+        const inp = contextTarget.querySelector('.des-input');
+        if (inp) {
+            inp.value = '';
+            inp.classList.remove('has-value');
+            markDirty();
+        }
+    } else if (action === 'clearAll') {
+        const inputs = treeArea.querySelectorAll('.des-input');
+        let count = 0;
+        inputs.forEach(inp => {
+            if (inp.value.trim()) {
+                inp.value = '';
+                inp.classList.remove('has-value');
+                count++;
+            }
+        });
+        if (count > 0) {
+            markDirty();
+            toast(`已清空 ${count} 条描述`, 'success');
+        } else {
+            toast('没有需要清空的描述');
+        }
+    }
+}
+
+document.addEventListener('click', () => {
+    if (contextEl) contextEl.style.display = 'none';
+});
+
+// ── 右键菜单（清空所有）─ 全局右键也支持 ──
+treeArea.addEventListener('contextmenu', (e) => {
+    // 只有点击在树区域空白处
+    if (!e.target.closest('.node-row')) {
+        e.preventDefault();
+        if (!contextEl) {
+            contextEl = document.createElement('div');
+            contextEl.className = 'context-menu';
+            contextEl.innerHTML = `
+                <div class="menu-item" data-action="clearAll">🧹 清空所有已填描述</div>
+            `;
+            document.body.appendChild(contextEl);
+            contextEl.addEventListener('click', ev => {
+                const action = ev.target.closest('.menu-item')?.dataset.action;
+                if (!action) return;
+                contextEl.style.display = 'none';
+                if (action === 'clearAll') {
+                    const inputs = treeArea.querySelectorAll('.des-input');
+                    let count = 0;
+                    inputs.forEach(inp => {
+                        if (inp.value.trim()) { inp.value = ''; inp.classList.remove('has-value'); count++; }
+                    });
+                    if (count > 0) { markDirty(); toast(`已清空 ${count} 条描述`, 'success'); }
+                }
+            });
+        }
+        contextEl.style.display = 'block';
+        contextEl.style.left = Math.min(e.clientX, window.innerWidth - 180) + 'px';
+        contextEl.style.top = e.clientY + 'px';
+    }
+});
+
+// ── 保存 ──
+async function doSave() {
+    if (VIEW_MODE) { toast('View mode — read-only', 'info'); return; }
+    if (!currentPath || !currentTree) return;
+
+    // 从 DOM 收集所有 des 到树结构
+    collectDes(currentTree, '', true);
+
+    try {
+        await api('/api/save', {
+            method: 'POST',
+            body: JSON.stringify({ path: currentPath, tree: currentTree }),
+        });
+        // 重新拉取 store，获取跨 entry 同步后的最新 des
+        await loadStore();
+        // 从更新后的 store 重新加载当前 tree（同步其他 entry 传来的 des）
+        if (store.paths[currentPath]) {
+            currentTree = store.paths[currentPath].tree;
+        }
+        isDirty = false;
+        dirtyBadge.style.display = 'none';
+        renderSidebar();
+        showTree();
+        toast('已保存到存储', 'success');
+    } catch (e) {
+        toast('保存失败: ' + e.message, 'error');
+    }
+}
+
+function collectDes(node, parentPath, isRoot) {
+    // 与 renderNode 完全一致的路径计算：root → ''，子节点 → parentPath + '/' + name
+    const nodePath = isRoot ? '' : (parentPath + '/' + node.name);
+    // 直接用 data-node-path 查 input，CSS 属性值需转义 " 和 \
+    const safePath = nodePath.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+    const inp = treeArea.querySelector(`.des-input[data-node-path="${safePath}"]`);
+    if (inp) node.des = inp.value.trim();
+    if (node.items) {
+        for (const child of node.items) {
+            collectDes(child, nodePath, false);
+        }
+    }
+}
+
+// ── 快捷键 ──
+document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        doSave();
+    }
+    if (e.key === 'Enter' && document.activeElement === pathInput) {
+        e.preventDefault();
+        doScan();
+    }
+});
+
+// ── 事件绑定 ──
+scanBtn.addEventListener('click', doScan);
+saveBtn.addEventListener('click', doSave);
+showSubdirsCheck.addEventListener('change', renderSidebar);
+
+// 选择文件夹：用 showDirectoryPicker 拿目录名，拼到当前输入框值后
+browseBtn.addEventListener('click', async () => {
+    if (!window.showDirectoryPicker) {
+        toast('当前浏览器不支持文件夹选择器，请手动输入路径', 'error');
+        return;
+    }
+    try {
+        const handle = await window.showDirectoryPicker();
+        const name = handle.name;
+        const cur = pathInput.value.trim();
+        if (!cur) {
+            pathInput.value = name;
+            toast('已选择「' + name + '」，请补全完整路径后扫描', 'info');
+        } else if (/[\\/]$/.test(cur)) {
+            pathInput.value = cur + name;
+        } else {
+            const sep = cur.includes('\\') ? '\\' : '/';
+            pathInput.value = cur + sep + name;
+        }
+        pathInput.focus();
+        pathInput.select();
+    } catch (e) {
+        if (e.name !== 'AbortError') toast('选择失败: ' + e.message, 'error');
+    }
+});
+
+// ── 配置面板 ──
+const configBtn = document.getElementById('configBtn');
+const configModal = document.getElementById('configModal');
+const configStorePath = document.getElementById('configStorePath');
+const configPort = document.getElementById('configPort');
+const configAutoOpen = document.getElementById('configAutoOpen');
+const configPathHint = document.getElementById('configPathHint');
+const configMsg = document.getElementById('configMsg');
+
+async function openConfigPanel() {
+    try {
+        const cfg = await api('/api/config');
+        configStorePath.value = cfg.store_path || '';
+        configPort.value = cfg.port || 8765;
+        configAutoOpen.checked = cfg.auto_open_browser !== false;
+        configPathHint.textContent = '配置文件: ' + (cfg._config_file || '.metastore/config.json');
+        configMsg.textContent = '';
+        configModal.style.display = 'flex';
+    } catch (e) {
+        toast('打开配置失败: ' + e.message, 'error');
+    }
+}
+
+function closeConfigPanel() {
+    configModal.style.display = 'none';
+}
+
+async function saveConfigPanel() {
+    const body = {
+        store_path: configStorePath.value.trim(),
+        port: parseInt(configPort.value) || 8765,
+        auto_open_browser: configAutoOpen.checked,
+    };
+    try {
+        const res = await api('/api/config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+        });
+        if (res.ok) {
+            toast('配置已保存。部分改动需重启服务生效。');
+            closeConfigPanel();
+        } else {
+            configMsg.textContent = '保存失败: ' + (res.error || 'unknown');
+        }
+    } catch (e) {
+        configMsg.textContent = '保存失败: ' + e.message;
+    }
+}
+
+configBtn.addEventListener('click', openConfigPanel);
+document.getElementById('configCloseBtn').addEventListener('click', closeConfigPanel);
+document.getElementById('configCancelBtn').addEventListener('click', closeConfigPanel);
+document.getElementById('configSaveBtn').addEventListener('click', saveConfigPanel);
+// 点击遮罩关闭
+configModal.addEventListener('click', (e) => {
+    if (e.target === configModal) closeConfigPanel();
+});
+
+// ── 初始化 ──
+if (VIEW_MODE) {
+    document.body.classList.add('view-mode');
+    document.querySelector('.toolbar').style.display = 'none';
+    document.querySelector('.settings-row').style.display = 'none';
+    statusbar.style.display = 'none';
+}
+loadStore();
+
+console.log('Meta Store 就绪');
+console.log('  输入路径 → 扫描 → 编辑 des → 保存');
+console.log('  数据存储: .metastore/meta-store.json');
+</script>
+</body>
+</html>

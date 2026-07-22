@@ -1,0 +1,28 @@
+# ___ gen-meta .gitignore ___
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Runtime data (user-specific scan results)
+.metastore/*
+!.metastore/.gitkeep
+data/*
+!data/.gitkeep
+
+# Local test files
+meta.json

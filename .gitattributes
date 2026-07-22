@@ -1,0 +1,15 @@
+# Auto-detect text files and normalize to LF on commit
+* text=auto
+
+# Windows scripts must keep CRLF
+*.bat text eol=crlf
+*.ps1 text eol=crlf
+
+# Python source
+*.py text
+
+# Data
+*.json text
+*.spec text
+*.html text
+*.md text

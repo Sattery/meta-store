@@ -326,7 +326,7 @@ body.view-mode .btn-primary { opacity: 0.4; pointer-events: none; }
     <label>深度:</label>
     <input id="depthInput" type="number" value="1" min="1" max="10" style="width:50px" />
     <label>排除:</label>
-    <input id="excludeInput" type="text" value="meta.json,.workbuddy,node_modules,.git" style="width:180px" />
+    <input id="excludeInput" type="text" value="" style="width:180px" placeholder="空则用配置，逗号分隔" />
     <label>仅目录:</label>
     <input id="dirsOnlyCheck" type="checkbox" checked />
 </div>
@@ -399,6 +399,9 @@ body.view-mode .btn-primary { opacity: 0.4; pointer-events: none; }
                 <input id="configAutoOpen" type="checkbox" style="width:auto" />
                 启动时自动打开浏览器
             </label>
+            <label style="font-size:13px;display:block;margin-bottom:4px">排除正则（每行一个）</label>
+            <textarea id="configExclude" rows="4" style="width:100%;margin-bottom:12px;font-size:12px"
+                      placeholder="^\..*&#10;node_modules&#10;__pycache__"></textarea>
         </div>
         <div class="modal-footer">
             <span id="configMsg" style="font-size:12px;color:var(--text-secondary);margin-right:auto"></span>
@@ -1130,6 +1133,7 @@ const configModal = document.getElementById('configModal');
 const configStorePath = document.getElementById('configStorePath');
 const configPort = document.getElementById('configPort');
 const configAutoOpen = document.getElementById('configAutoOpen');
+const configExclude = document.getElementById('configExclude');
 const configPathHint = document.getElementById('configPathHint');
 const configMsg = document.getElementById('configMsg');
 
@@ -1139,6 +1143,7 @@ async function openConfigPanel() {
         configStorePath.value = cfg.store_path || '';
         configPort.value = cfg.port || 8765;
         configAutoOpen.checked = cfg.auto_open_browser !== false;
+        configExclude.value = (cfg.exclude_patterns || []).join('\n');
         configPathHint.textContent = '配置文件: ' + (cfg._config_file || '.metastore/config.json');
         configMsg.textContent = '';
         configModal.style.display = 'flex';
@@ -1156,6 +1161,7 @@ async function saveConfigPanel() {
         store_path: configStorePath.value.trim(),
         port: parseInt(configPort.value) || 8765,
         auto_open_browser: configAutoOpen.checked,
+        exclude_patterns: configExclude.value.split('\n').map(s => s.trim()).filter(Boolean),
     };
     try {
         const res = await api('/api/config', {

@@ -34,7 +34,13 @@ DEFAULTS = {
     "store_path": _get_data_dir_name() + "/meta-store.json",
     "port": 8765,
     "auto_open_browser": True,
-    "exclude_patterns": [r"^\..*"],  # 默认排除隐藏文件/文件夹
+    "exclude_patterns": [
+        r"^\..*",       # 隐藏文件/文件夹
+        "node_modules",
+        "__pycache__",
+        "dist",
+        "build",
+    ],
 }
 
 

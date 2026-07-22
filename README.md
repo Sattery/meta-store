@@ -32,7 +32,3 @@ python meta-store.py view            # 浏览器可视化
 ## 配置
 
 默认存储位置：exe 版用 `.metastore/`（隐藏目录），源码版用 `data/`。可通过托盘右键「打开配置」或网页 ⚙️ 按钮自定义。
-
----
-
-更多细节见 [DEVELOPMENT.md](DEVELOPMENT.md)。

@@ -1,4 +1,4 @@
-# ___ gen-meta .gitignore ___
+# ___ meta-store .gitignore ___
 
 # Python
 __pycache__/
@@ -23,6 +23,9 @@ Thumbs.db
 !.metastore/.gitkeep
 data/*
 !data/.gitkeep
+
+# Dev notes (keep local only)
+DEVELOPMENT.md
 
 # Local test files
 meta.json

@@ -212,7 +212,7 @@ class MetaHandler(BaseHTTPRequestHandler):
                 "scan_config": {
                     "depth": depth,
                     "fields": fields,
-                    "exclude": exclude,
+                    "exclude": ",".join(exclude_pats),
                     "dirs_only": dirs_only,
                 },
                 "tree": new_tree,

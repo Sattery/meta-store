@@ -40,11 +40,10 @@ def cmd_scan(args):
     old_tree = store.get("paths", {}).get(key, {}).get("tree")
 
     print(f"Scanning: {key}")
+    from meta_store.config import load_config
+    exclude_pats = list(load_config().get("exclude_patterns", [r"^\..*"]))
     if args.exclude:
-        exclude_pats = [n.strip() for n in args.exclude.split(",") if n.strip()]
-    else:
-        from meta_store.config import load_config
-        exclude_pats = load_config().get("exclude_patterns", [r"^\..*"])
+        exclude_pats.extend(n.strip() for n in args.exclude.split(",") if n.strip())
     new_tree = scan_path(
         target,
         depth=args.depth,

@@ -153,11 +153,11 @@ class MetaHandler(BaseHTTPRequestHandler):
 
         # 排除规则：优先前端传值（兼容旧逗号格式），否则用 config
         cfg = load_config()
-        exclude_raw = body.get("exclude", "").strip()
-        if exclude_raw:
-            exclude_pats = [n.strip() for n in exclude_raw.split(",") if n.strip()]
-        else:
-            exclude_pats = cfg.get("exclude_patterns", [r"^\..*"])
+        exclude_pats = list(cfg.get("exclude_patterns", [r"^\..*"]))
+        # 主页排除框作为补充追加，不覆盖 config 默认
+        extra = body.get("exclude", "").strip()
+        if extra:
+            exclude_pats.extend(n.strip() for n in extra.split(",") if n.strip())
 
         try:
             new_tree = scan_path(

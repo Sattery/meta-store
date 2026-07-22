@@ -47,11 +47,18 @@ def is_excluded(name: str, excludes: set) -> bool:
 
 # ── 目录统计（递归）───────────────────────────────────────────
 
-def count_dir(dir_path: Path) -> tuple[int, int]:
-    """递归统计目录内文件数和总大小。返回 (file_count, total_size)。"""
+def count_dir(dir_path: Path, excludes: set | None = None) -> tuple[int, int]:
+    """递归统计目录内文件数和总大小。返回 (file_count, total_size)。
+
+    跳过 excludes 中的目录，避免深入 .venv/node_modules 等。
+    """
     fc, ts = 0, 0
+    skips = excludes or set()
     try:
         for f in dir_path.rglob("*"):
+            # 跳过排除目录及其后代
+            if any(p.name in skips for p in f.parents if p != dir_path):
+                continue
             try:
                 if f.is_file() and not f.is_symlink():
                     try:
@@ -121,7 +128,7 @@ def build_tree(
             need_fc = "file_count" in fields
             need_ts = "total_size" in fields or "total_size_human" in fields
             if need_fc or need_ts:
-                fc, ts = count_dir(entry)
+                fc, ts = count_dir(entry, excludes)
                 if need_fc:
                     node["file_count"] = fc
                 if "total_size" in fields:
@@ -238,7 +245,7 @@ def scan_path(
         root_node["items"] = new_items
 
     if "file_count" in selected_fields or "total_size" in selected_fields or "total_size_human" in selected_fields:
-        fc, ts = count_dir(target)
+        fc, ts = count_dir(target, excludes)
         if "file_count" in selected_fields:
             root_node["file_count"] = fc
         if "total_size" in selected_fields:

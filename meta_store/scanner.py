@@ -52,13 +52,16 @@ def count_dir(dir_path: Path) -> tuple[int, int]:
     fc, ts = 0, 0
     try:
         for f in dir_path.rglob("*"):
-            if f.is_file() and not f.is_symlink():
-                try:
-                    fc += 1
-                    ts += f.stat().st_size
-                except OSError:
-                    pass
-    except PermissionError:
+            try:
+                if f.is_file() and not f.is_symlink():
+                    try:
+                        fc += 1
+                        ts += f.stat().st_size
+                    except OSError:
+                        pass
+            except OSError:
+                pass
+    except (PermissionError, OSError):
         pass
     return fc, ts
 
@@ -91,12 +94,20 @@ def build_tree(
         if is_excluded(entry.name, excludes):
             continue
 
+        # 判断类型前先捕获异常（长路径/权限/特殊文件）
+        try:
+            is_dir = entry.is_dir()
+            is_file = entry.is_file()
+            is_sym = entry.is_symlink()
+        except OSError:
+            continue
+
         try:
             st = entry.stat()
         except OSError:
             continue
 
-        if entry.is_dir() and not entry.is_symlink():
+        if is_dir and not is_sym:
             children = build_tree(
                 entry, excludes, max_depth, fields, show_files, current_depth + 1,
             )
@@ -135,7 +146,7 @@ def build_tree(
 
             items.append(node)
 
-        elif entry.is_file() and not entry.is_symlink() and show_files:
+        elif is_file and not is_sym and show_files:
             node = {
                 "name": entry.name,
                 "type": "file",

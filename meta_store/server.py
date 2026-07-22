@@ -29,9 +29,10 @@ ROOT_DIR = Path(__file__).resolve().parent.parent
 EDITOR_FILE = ROOT_DIR / "static" / "editor.html"
 
 DEFAULT_PORT = 8765
-DEFAULT_DEPTH = 2
-DEFAULT_FIELDS = "size,modified,file_count,total_size_human"
+DEFAULT_DEPTH = 1
+DEFAULT_FIELDS = "modified,file_count,total_size_human"
 DEFAULT_EXCLUDE = "meta.json,.workbuddy,node_modules,.git"
+DEFAULT_DIRS = True  # 默认只看文件夹
 
 # ── 存储读写锁 ────────────────────────────────────────────────
 
@@ -150,7 +151,7 @@ class MetaHandler(BaseHTTPRequestHandler):
         depth = body.get("depth", DEFAULT_DEPTH)
         fields = body.get("fields", DEFAULT_FIELDS)
         exclude = body.get("exclude", DEFAULT_EXCLUDE)
-        dirs_only = body.get("dirs_only", False)
+        dirs_only = body.get("dirs_only", DEFAULT_DIRS)
 
         try:
             new_tree = scan_path(
@@ -184,7 +185,10 @@ class MetaHandler(BaseHTTPRequestHandler):
                 tree_des = flatten_des(entry["tree"].get("items", []), pkey)
                 all_des.update(tree_des)
             if all_des:
-                merge_des(new_tree.get("items", []), all_des)
+                merge_des(new_tree.get("items", []), all_des, key)
+                # 根节点也从 all_des 里取
+                if key in all_des and not new_tree.get("des", "").strip():
+                    new_tree["des"] = all_des[key]
 
             # 存入
             store["paths"][key] = {

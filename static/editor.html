@@ -324,11 +324,11 @@ body.view-mode .btn-primary { opacity: 0.4; pointer-events: none; }
 <!-- 扫描设置 -->
 <div class="settings-row">
     <label>深度:</label>
-    <input id="depthInput" type="number" value="2" min="1" max="10" style="width:50px" />
+    <input id="depthInput" type="number" value="1" min="1" max="10" style="width:50px" />
     <label>排除:</label>
     <input id="excludeInput" type="text" value="meta.json,.workbuddy,node_modules,.git" style="width:180px" />
     <label>仅目录:</label>
-    <input id="dirsOnlyCheck" type="checkbox" />
+    <input id="dirsOnlyCheck" type="checkbox" checked />
 </div>
 
 <!-- 主体 -->
@@ -338,7 +338,7 @@ body.view-mode .btn-primary { opacity: 0.4; pointer-events: none; }
         <div class="sidebar-header">
             <span>📁 已扫描路径 <span id="pathCount" style="font-size:11px;color:var(--text-secondary)">0</span></span>
             <label class="sidebar-opt" title="展开显示已扫描路径下的子目录树">
-                <input id="showSubdirsCheck" type="checkbox" checked /> 展示子目录
+                <input id="showSubdirsCheck" type="checkbox" /> 展示子目录
             </label>
         </div>
         <div class="sidebar-list" id="sidebarList">
@@ -669,7 +669,7 @@ async function doScan() {
             method: 'POST',
             body: JSON.stringify({
                 path: path,
-                depth: parseInt(depthInput.value) || 2,
+                depth: parseInt(depthInput.value) || 1,
                 fields: 'size,size_human,modified,file_count,total_size_human',
                 exclude: excludeInput.value,
                 dirs_only: dirsOnlyCheck.checked,

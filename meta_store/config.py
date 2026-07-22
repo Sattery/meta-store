@@ -8,10 +8,12 @@
   store_path        存储文件路径（相对 base_dir 或绝对路径）
   port              HTTP 服务端口（默认 8765）
   auto_open_browser 启动时是否自动打开浏览器
+  exclude_patterns  扫描时排除的文件/目录名正则列表
 """
 
 import json
 import os
+import re
 import sys
 from pathlib import Path
 from copy import deepcopy
@@ -32,6 +34,7 @@ DEFAULTS = {
     "store_path": _get_data_dir_name() + "/meta-store.json",
     "port": 8765,
     "auto_open_browser": True,
+    "exclude_patterns": [r"^\..*"],  # 默认排除隐藏文件/文件夹
 }
 
 

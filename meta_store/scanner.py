@@ -2,19 +2,15 @@
 
 从 meta-store.py 抽取，供 server.py 和 meta-store.py(CLI) 共用。
 职责：构建目录树节点、统计目录信息、des 字段合并保留。
+
+排除规则：正则列表，匹配 name 即跳过（默认 ^\\..* 排除隐藏文件）。
 """
 
 import json
 import os
+import re
 from datetime import datetime
 from pathlib import Path
-# ── 常量 ──────────────────────────────────────────────────────
-
-DEFAULT_EXCLUDES = {
-    ".git", "node_modules", "__pycache__", ".venv", ".tox",
-    ".idea", ".vscode", "__MACOSX", ".DS_Store", ".pytest_cache",
-    ".mypy_cache", ".ruff_cache", "dist", "build", ".next",
-}
 
 AVAILABLE_FIELDS = {
     "size":             "文件大小 (file)",
@@ -41,23 +37,27 @@ def format_size(nbytes: int) -> str:
     return f"{nbytes:.1f} PB"
 
 
-def is_excluded(name: str, excludes: set) -> bool:
-    return name in excludes
+def compile_excludes(patterns: list[str]) -> list[re.Pattern]:
+    """编译排除正则列表。"""
+    return [re.compile(p) for p in patterns if p]
+
+
+def is_excluded(name: str, compiled: list[re.Pattern]) -> bool:
+    return any(p.match(name) for p in compiled)
 
 
 # ── 目录统计（递归）───────────────────────────────────────────
 
-def count_dir(dir_path: Path, excludes: set | None = None) -> tuple[int, int]:
+def count_dir(dir_path: Path, compiled: list[re.Pattern]) -> tuple[int, int]:
     """递归统计目录内文件数和总大小。返回 (file_count, total_size)。
 
-    跳过 excludes 中的目录，避免深入 .venv/node_modules 等。
+    跳过编译后正则匹配到的目录及其后代。
     """
     fc, ts = 0, 0
-    skips = excludes or set()
     try:
         for f in dir_path.rglob("*"):
             # 跳过排除目录及其后代
-            if any(p.name in skips for p in f.parents if p != dir_path):
+            if any(is_excluded(p.name, compiled) for p in f.parents if p != dir_path):
                 continue
             try:
                 if f.is_file() and not f.is_symlink():
@@ -77,13 +77,14 @@ def count_dir(dir_path: Path, excludes: set | None = None) -> tuple[int, int]:
 
 def build_tree(
     root: Path,
-    excludes: set,
+    compiled: list[re.Pattern],
     max_depth: int,
     fields: set,
     show_files: bool,
     current_depth: int = 0,
 ) -> list[dict] | None:
     """递归构建目录节点列表。"""
+
     if max_depth >= 0 and current_depth > max_depth:
         return None
 
@@ -98,7 +99,7 @@ def build_tree(
     items: list[dict] = []
 
     for entry in entries:
-        if is_excluded(entry.name, excludes):
+        if is_excluded(entry.name, compiled):
             continue
 
         # 判断类型前先捕获异常（长路径/权限/特殊文件）
@@ -116,7 +117,7 @@ def build_tree(
 
         if is_dir and not is_sym:
             children = build_tree(
-                entry, excludes, max_depth, fields, show_files, current_depth + 1,
+                entry, compiled, max_depth, fields, show_files, current_depth + 1,
             )
 
             node: dict = {
@@ -128,7 +129,7 @@ def build_tree(
             need_fc = "file_count" in fields
             need_ts = "total_size" in fields or "total_size_human" in fields
             if need_fc or need_ts:
-                fc, ts = count_dir(entry, excludes)
+                fc, ts = count_dir(entry, compiled)
                 if need_fc:
                     node["file_count"] = fc
                 if "total_size" in fields:
@@ -212,19 +213,18 @@ def scan_path(
     target: Path,
     depth: int = -1,
     fields_str: str = "size,size_human,modified,file_count,total_size_human",
-    exclude_names: str | None = None,
+    exclude_patterns: list[str] | None = None,
     dirs_only: bool = False,
 ) -> dict:
     """扫描路径，返回完整 meta 节点（含根）。
 
-    自动加载该路径已有的 meta（若同目录有 meta.json）并保留 des。
+    exclude_patterns: 正则列表，默认 ["^\\..*"]（隐藏文件）。
     """
     if not target.is_dir():
         raise NotADirectoryError(f"'{target}' 不是有效目录")
 
-    excludes = DEFAULT_EXCLUDES.copy()
-    if exclude_names:
-        excludes.update(n.strip() for n in exclude_names.split(",") if n.strip())
+    patterns = exclude_patterns or [r"^\..*"]
+    compiled = compile_excludes(patterns)
 
     selected_fields: set[str] = set()
     for f in fields_str.split(","):
@@ -233,7 +233,7 @@ def scan_path(
             selected_fields.add(f)
 
     show_files = not dirs_only
-    new_items = build_tree(target, excludes, depth, selected_fields, show_files) or []
+    new_items = build_tree(target, compiled, depth, selected_fields, show_files) or []
 
     root_node: dict = {
         "name": target.name,
@@ -245,7 +245,7 @@ def scan_path(
         root_node["items"] = new_items
 
     if "file_count" in selected_fields or "total_size" in selected_fields or "total_size_human" in selected_fields:
-        fc, ts = count_dir(target, excludes)
+        fc, ts = count_dir(target, compiled)
         if "file_count" in selected_fields:
             root_node["file_count"] = fc
         if "total_size" in selected_fields:

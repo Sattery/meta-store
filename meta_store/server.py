@@ -31,7 +31,6 @@ EDITOR_FILE = ROOT_DIR / "static" / "editor.html"
 DEFAULT_PORT = 8765
 DEFAULT_DEPTH = 1
 DEFAULT_FIELDS = "modified,file_count,total_size_human"
-DEFAULT_EXCLUDE = "meta.json,.workbuddy,node_modules,.git"
 DEFAULT_DIRS = True  # 默认只看文件夹
 
 # ── 存储读写锁 ────────────────────────────────────────────────
@@ -150,15 +149,22 @@ class MetaHandler(BaseHTTPRequestHandler):
 
         depth = body.get("depth", DEFAULT_DEPTH)
         fields = body.get("fields", DEFAULT_FIELDS)
-        exclude = body.get("exclude", DEFAULT_EXCLUDE)
         dirs_only = body.get("dirs_only", DEFAULT_DIRS)
+
+        # 排除规则：优先前端传值（兼容旧逗号格式），否则用 config
+        cfg = load_config()
+        exclude_raw = body.get("exclude", "").strip()
+        if exclude_raw:
+            exclude_pats = [n.strip() for n in exclude_raw.split(",") if n.strip()]
+        else:
+            exclude_pats = cfg.get("exclude_patterns", [r"^\..*"])
 
         try:
             new_tree = scan_path(
                 target,
                 depth=depth,
                 fields_str=fields,
-                exclude_names=exclude,
+                exclude_patterns=exclude_pats,
                 dirs_only=dirs_only,
             )
         except Exception as e:
@@ -257,7 +263,7 @@ class MetaHandler(BaseHTTPRequestHandler):
         body = self._read_body()
         # 合并写入：只更新传过来的字段
         cfg = load_config()
-        for k in ("store_path", "port", "auto_open_browser"):
+        for k in ("store_path", "port", "auto_open_browser", "exclude_patterns"):
             if k in body:
                 cfg[k] = body[k]
         save_config(cfg)

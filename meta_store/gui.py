@@ -475,7 +475,7 @@ class MetaStoreGUI(ctk.CTk):
             new_tree = scan_path(
                 target, depth=depth,
                 fields_str="size,size_human,modified,file_count,total_size_human",
-                exclude_names=exclude or None,
+                exclude_patterns=exclude.split(",") if exclude else None,
                 dirs_only=dirs_only,
             )
             new_tree = merge_des_from_tree(new_tree, old_tree)

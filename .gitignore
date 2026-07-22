@@ -21,8 +21,7 @@ Thumbs.db
 # Runtime data (user-specific scan results)
 .metastore/*
 !.metastore/.gitkeep
-data/*
-!data/.gitkeep
+data/
 
 # Dev notes (keep local only)
 DEVELOPMENT.md

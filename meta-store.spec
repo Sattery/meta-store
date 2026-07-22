@@ -23,6 +23,7 @@ exe = EXE(
     a.datas,
     [],
     name='meta-store',
+    onefile=True,
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

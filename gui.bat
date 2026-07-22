@@ -1,16 +1,17 @@
 @echo off
 cd /d "%~dp0"
+
 if not exist ".venv\Scripts\python.exe" (
-    echo First run: installing GUI dependencies...
-    uv venv
-    uv pip install -r requirements.txt
+    echo Creating venv and installing GUI dependencies...
+    python -m venv .venv
+    .venv\Scripts\python.exe -m pip install -r requirements.txt -q
     if errorlevel 1 (
         echo.
-        echo Failed! Install uv first, or run manually:
-        echo   pip install customtkinter
+        echo Failed to install dependencies.
         pause
         exit /b 1
     )
-    echo.
+    echo Done.
 )
+
 ".venv\Scripts\python.exe" meta-store.py gui

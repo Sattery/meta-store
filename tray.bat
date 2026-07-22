@@ -2,17 +2,16 @@
 cd /d "%~dp0"
 
 if not exist ".venv\Scripts\pythonw.exe" (
-    echo First run: installing dependencies...
-    uv venv
-    uv pip install -r requirements.txt
+    echo Creating venv and installing dependencies...
+    python -m venv .venv
+    .venv\Scripts\python.exe -m pip install -r requirements.txt -q
     if errorlevel 1 (
         echo.
-        echo Failed! Install uv first, or run manually:
-        echo   pip install pystray Pillow
+        echo Failed to install dependencies.
         pause
         exit /b 1
     )
-    echo.
+    echo Done.
 )
 
 start "" ".venv\Scripts\pythonw.exe" meta_store\tray.py

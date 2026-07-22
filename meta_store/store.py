@@ -7,6 +7,9 @@
   - 相对路径 → 相对于基准目录（exe 或项目根目录）
   - 绝对路径 → 直接使用
   - 默认: .metastore/meta-store.json
+
+⚠ 所有路径均动态解析（每次调用 get_store_path → load_config），
+  确保修改 config.json 后无需重启进程即可生效（托盘重启即可）。
 """
 
 import json
@@ -16,26 +19,31 @@ from pathlib import Path
 
 from meta_store.config import get_store_path
 
-# ── 路径 ──────────────────────────────────────────────────────
 
-def _resolve_paths():
-    """解析存储文件路径，返回 (store_file, data_dir, backup_file)。"""
+# ── 路径（动态解析，无模块级缓存）─────────────────────────────
+
+def _store_paths():
+    """动态解析存储路径元组 (store_file, data_dir, backup_file)。"""
     store = get_store_path()
     data_dir = store.parent
     backup = data_dir / (store.stem + ".bak")
     return store, data_dir, backup
 
-STORE_FILE, DATA_DIR, BACKUP_FILE = _resolve_paths()
+
+def get_data_dir() -> Path:
+    """获取当前 store 文件所在目录。"""
+    return _store_paths()[1]
 
 
 # ── 读 ────────────────────────────────────────────────────────
 
 def load_store() -> dict:
     """加载存储文件。不存在时返回空结构。"""
-    if not STORE_FILE.exists():
+    store_file = _store_paths()[0]
+    if not store_file.exists():
         return {"version": 1, "updated_at": "", "paths": {}}
     try:
-        data = json.loads(STORE_FILE.read_text(encoding="utf-8"))
+        data = json.loads(store_file.read_text(encoding="utf-8"))
         if isinstance(data, dict) and "paths" in data:
             return data
     except (json.JSONDecodeError, OSError):
@@ -53,31 +61,32 @@ def save_store(store: dict):
       - 再写入新内容到 meta-store.json
       - 若写入失败 → 尝试从 .bak 恢复
     """
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    store_file, data_dir, backup_file = _store_paths()
+    data_dir.mkdir(parents=True, exist_ok=True)
     store["updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     # 1 份备份：将当前文件改为 .bak
-    if STORE_FILE.exists():
+    if store_file.exists():
         try:
-            os.replace(str(STORE_FILE), str(BACKUP_FILE))
+            os.replace(str(store_file), str(backup_file))
         except OSError:
             pass  # 备份失败不阻塞保存
 
     # 原子写入
-    tmp = STORE_FILE.with_suffix(".tmp")
+    tmp = store_file.with_suffix(".tmp")
     try:
         tmp.write_text(
             json.dumps(store, indent=2, ensure_ascii=False) + "\n",
             encoding="utf-8",
         )
-        os.replace(str(tmp), str(STORE_FILE))
+        os.replace(str(tmp), str(store_file))
     except Exception:
         # 写入失败，尝试从备份恢复
         if tmp.exists():
             tmp.unlink()
-        if BACKUP_FILE.exists() and not STORE_FILE.exists():
+        if backup_file.exists() and not store_file.exists():
             try:
-                os.replace(str(BACKUP_FILE), str(STORE_FILE))
+                os.replace(str(backup_file), str(store_file))
             except OSError:
                 pass
         raise

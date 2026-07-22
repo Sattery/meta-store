@@ -27,7 +27,8 @@ if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
 from meta_store.config import CONFIG_FILE, save_config, load_config
-from meta_store.server import MetaHandler, find_free_port, DEFAULT_PORT, DATA_DIR
+from meta_store.server import MetaHandler, find_free_port, DEFAULT_PORT
+from meta_store.store import get_data_dir
 
 EDITOR_URL = "http://127.0.0.1:{port}"
 
@@ -83,8 +84,11 @@ class TrayApp:
     # ── 后台 HTTP Server ──
 
     def _start_server(self):
-        DATA_DIR.mkdir(parents=True, exist_ok=True)
-        self.port = find_free_port(self.port)
+        get_data_dir().mkdir(parents=True, exist_ok=True)
+        # 重启时重新读取 config.json，使端口等配置改动生效
+        cfg = load_config()
+        preferred = cfg.get("port", DEFAULT_PORT)
+        self.port = find_free_port(preferred)
         self.server = HTTPServer(("127.0.0.1", self.port), MetaHandler)
         self.server.serve_forever()
 

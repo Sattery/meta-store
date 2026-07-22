@@ -1,8 +1,7 @@
 """config.py — Meta Store 配置管理。
 
 路径逻辑：
-  - 打包环境 (exe):  同目录 .metastore/ (隐藏目录)
-  - 源码环境:        项目根 data/
+  统一使用 .metastore/ 隐藏目录（不再区分 exe/源码环境）。
 
 配置项:
   store_path        存储文件路径（相对 base_dir 或绝对路径）
@@ -14,6 +13,7 @@
 import json
 import os
 import re
+import shutil
 import sys
 from pathlib import Path
 from copy import deepcopy
@@ -23,15 +23,12 @@ def _is_frozen() -> bool:
     return getattr(sys, "frozen", False)
 
 
-def _get_data_dir_name() -> str:
-    """exe 用隐藏目录 .metastore，源码用 data。"""
-    return ".metastore" if _is_frozen() else "data"
-
-
 # ── 默认配置 ──────────────────────────────────────────────────
 
+DATA_DIR_NAME = ".metastore"
+
 DEFAULTS = {
-    "store_path": _get_data_dir_name() + "/meta-store.json",
+    "store_path": DATA_DIR_NAME + "/meta-store.json",
     "port": 8765,
     "auto_open_browser": True,
     "exclude_patterns": [
@@ -54,8 +51,19 @@ def _get_base_dir() -> Path:
 # ── 路径 ──────────────────────────────────────────────────────
 
 BASE_DIR = _get_base_dir()
-DATA_DIR = BASE_DIR / _get_data_dir_name()
+DATA_DIR = BASE_DIR / DATA_DIR_NAME
 CONFIG_FILE = DATA_DIR / "config.json"
+
+# 旧版数据迁移：如果有 data/ 但还没有 .metastore/，自动迁过去
+LEGACY_DATA_DIR = BASE_DIR / "data"
+LEGACY_CONFIG = LEGACY_DATA_DIR / "config.json"
+LEGACY_STORE = LEGACY_DATA_DIR / "meta-store.json"
+
+if LEGACY_CONFIG.exists() and not CONFIG_FILE.exists():
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(str(LEGACY_CONFIG), str(CONFIG_FILE))
+    if LEGACY_STORE.exists():
+        shutil.copy2(str(LEGACY_STORE), str(DATA_DIR / "meta-store.json"))
 
 
 # ── 读写 ──────────────────────────────────────────────────────

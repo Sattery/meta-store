@@ -171,6 +171,21 @@ class MetaHandler(BaseHTTPRequestHandler):
             old_tree = store["paths"].get(key, {}).get("tree")
             new_tree = merge_des_from_tree(new_tree, old_tree)
 
+            # 从其他 entry 收集 des 合并到新树（解决先扫子目录后扫父目录的同步）
+            all_des = {}
+            sep = "\\" if "\\" in key else "/"
+            for pkey, entry in store["paths"].items():
+                if pkey == key or not entry.get("tree"):
+                    continue
+                root_d = entry["tree"].get("des", "").strip()
+                if root_d:
+                    all_des[pkey] = root_d
+                from meta_store.scanner import flatten_des, merge_des
+                tree_des = flatten_des(entry["tree"].get("items", []), pkey)
+                all_des.update(tree_des)
+            if all_des:
+                merge_des(new_tree.get("items", []), all_des)
+
             # 存入
             store["paths"][key] = {
                 "path": key,
